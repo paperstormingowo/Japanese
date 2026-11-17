@@ -1,0 +1,10 @@
+{
+  "name": "回轉壽司",
+  "short_name": "回轉壽司",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbf5ea",
+  "theme_color": "#fbf5ea",
+  "icons": [{ "src": "icon.png", "sizes": "512x512", "type": "image/png" }]
+}

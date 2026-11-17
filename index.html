@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="回轉壽司">
+<meta name="theme-color" content="#fbf5ea">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>回轉壽司</title>
+<style>
+  :root { --red: #d0342c; --green: #2e7d32; --ink: #222; --muted: #777; --orange: #e0802c; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #fbf5ea; color: var(--ink);
+    font-family: -apple-system, "PingFang TC", "Hiragino Sans", "Microsoft JhengHei", sans-serif; font-size: 16px;
+    overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+  #app { position: fixed; left: 0; top: 0; width: 100%; height: 100%; display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+  .screen { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  .screen.on { display: flex; }
+  [lang=ja] { font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif; }
+  button { font: inherit; color: var(--ink); border: 1px solid #999; border-radius: 10px; padding: 10px 18px; background: #fff; }
+  button.primary { border: none; background: var(--orange); color: #fff; font-size: 20px; font-weight: bold; padding: 14px 48px; }
+
+  #start { align-items: center; justify-content: center; gap: 18px; padding: 16px; text-align: center; overflow-y: auto; }
+  #start h1 { margin: 0; font-size: 34px; }
+  #start p { margin: 0; line-height: 1.7; font-size: 15px; }
+  #cats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; text-align: left; }
+  #cats label { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+  #cats input { width: 22px; height: 22px; accent-color: var(--orange); }
+  #startMsg { color: var(--red); min-height: 22px; }
+  #footer { color: var(--muted); font-size: 13px; }
+
+  #hud { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 10px; background: #fff8ea; flex: none; }
+  #hearts { font-size: 22px; letter-spacing: 1px; white-space: nowrap; }
+  #hearts span { position: relative; color: #cfc6b5; }
+  #hearts span::after { content: "♥"; position: absolute; left: 0; top: 0; color: var(--red); overflow: hidden; width: var(--w, 0); }
+  #lvBox { flex: 1; text-align: center; font-size: 13px; font-weight: bold; min-width: 0; }
+  #bar { height: 7px; margin: 3px auto 0; width: 80%; max-width: 180px; background: #e6dcc8; border-radius: 4px; overflow: hidden; }
+  #bar i { display: block; height: 100%; background: var(--orange); width: 0; }
+  #eaten { font-size: 13px; font-weight: bold; white-space: nowrap; }
+  #quit { border: none; background: none; padding: 6px 4px 6px 8px; font-size: 18px; color: var(--muted); }
+  #stage { flex: 1; min-height: 0; width: 100%; display: block; background: #e9d3a9; }
+  #feedback { flex: none; min-height: 50px; padding: 4px 10px; display: flex; align-items: center; justify-content: center;
+    flex-wrap: wrap; gap: 2px 8px; text-align: center; font-size: 14px; line-height: 1.35; }
+  #feedback .big { font-size: 22px; font-weight: bold; }
+  #feedback .mid { font-size: 18px; font-weight: bold; }
+  #f { flex: none; padding: 0 10px 8px; }
+  #inp { width: 100%; border: 3px solid var(--orange); border-radius: 10px; padding: 6px 12px; background: #fff;
+    font-size: 22px; text-align: center; outline: none; color: var(--ink); }
+
+  #result { padding: 16px 14px calc(12px + env(safe-area-inset-bottom)); gap: 8px; }
+  #resTitle { font-size: 20px; font-weight: bold; }
+  #resSub { color: var(--muted); font-size: 14px; }
+  #review { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 8px; }
+  .card { background: #fff; border: 1px solid #eadfcb; border-radius: 10px; padding: 10px 12px; display: grid;
+    grid-template-columns: 40px 1fr; gap: 2px 8px; align-items: center; }
+  .card .pic { font-size: 28px; text-align: center; grid-row: span 2; }
+  .card .zh { color: var(--muted); font-size: 14px; }
+  .card .kana { font-size: 22px; font-weight: bold; color: var(--red); }
+  .card .kanji { font-size: 15px; margin-left: 8px; }
+  .card .ex { grid-column: 1 / -1; font-size: 15px; border-top: 1px dashed #eadfcb; padding-top: 6px; margin-top: 4px; }
+  .card .ex b { color: var(--red); }
+  .card .ex small { display: block; color: var(--muted); font-size: 13px; }
+  #resBtns { display: flex; justify-content: flex-end; gap: 10px; }
+  .muted { color: var(--muted); } .red { color: var(--red); } .green { color: var(--green); }
+</style>
+</head>
+<body>
+<div id="app">
+  <section id="start" class="screen on">
+    <h1>🍣 回轉壽司</h1>
+    <p>看盤子上的<b>中文</b>，打出<b>日文讀音</b>就吃掉<br>（假名、羅馬拼音都算）<br>
+      漏一盤扣 1 顆♥，打錯按送出扣 ½～1 顆<br><b class="red">5 顆</b>扣完就結束<br>
+      每吃 10 盤升一級（N5 → N4 → N3 → N2）</p>
+    <div id="cats"></div>
+    <button class="primary" id="startBtn">開始</button>
+    <div id="startMsg"></div>
+    <div id="footer"></div>
+  </section>
+
+  <section id="play" class="screen">
+    <div id="hud">
+      <div id="hearts"></div>
+      <div id="lvBox"><span id="lv"></span><div id="bar"><i></i></div></div>
+      <div id="eaten"></div>
+      <button id="quit" type="button" aria-label="結束這局">✕</button>
+    </div>
+    <canvas id="stage"></canvas>
+    <div id="feedback"></div>
+    <form id="f" autocomplete="off">
+      <input id="inp" lang="ja" type="text" inputmode="text" enterkeyhint="send" autocomplete="off" autocorrect="off"
+             autocapitalize="off" spellcheck="false" placeholder="看中文，打出日文讀音">
+    </form>
+  </section>
+
+  <section id="result" class="screen">
+    <div id="resTitle"></div>
+    <div id="resSub"></div>
+    <div id="review"></div>
+    <div id="resBtns"><button id="backBtn">換題材</button><button class="primary" id="againBtn">再一局</button></div>
+  </section>
+</div>
+
+<script src="fsrs.js"></script>
+<script src="learn.js"></script>
+<script>
+"use strict";
+/* 規則正本是桌機的 sushi.py（SPEC §9）。手機版只改了畫面尺寸與下面三個節奏常數。 */
+const HP = 5, PER_LEVEL = 10, GAP = 8, RETRY_GAP = 4;
+const TRAVEL_S = 52;      // 一盤從入口走到出口的秒數（桌機 2834px ÷ 54px/秒，照搬）
+const SPAWN_MS = 4500;    // 出盤間隔（桌機 3300；手機軌道短、打字慢，拉開）
+const MAX_PLATES = 8;     // 輸送帶上最多幾盤（桌機 12）
+const CATS = { fish: ["魚・生魚片", "#ef7d57"], veg: ["蔬菜水果", "#7cb342"], goods: ["日用品", "#4a8fe0"],
+  home: ["家事・家電", "#9b6dd6"], food: ["料理・點心", "#d9a521"], place: ["地名・景點", "#2a9d8f"],
+  sake: ["清酒", "#8d6e63"], people: ["人物", "#e05297"], holo: ["らでん用語", "#5c6bc0"] };
+const RED = "#d0342c", INK = "#222";
+const ZH = '-apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif';
+const JA = '"Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif';
+const TIERS = Learn.TIERS;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const store = (() => { try { localStorage.getItem("x"); return localStorage; } catch (e) {
+  const m = {}; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = v; } }; } })();
+
+const app = $("app"), cv = $("stage"), ctx = cv.getContext("2d"), inp = $("inp");
+let WORDS = [];
+const g = { playing: false, plates: [], pops: [], hp: 2 * HP, eaten: 0, dist: 0, t: 0, hurtAt: -9999 };
+let geo = null, stale = "", raf = 0, lastFrame = 0;
+
+/* ---- 畫面大小：鍵盤彈出時，整個畫面縮到鍵盤上方 ---- */
+function fit() {
+  const vv = window.visualViewport;
+  app.style.height = (vv ? vv.height : window.innerHeight) + "px";
+  app.style.top = (vv ? vv.offsetTop : 0) + "px";
+  if ($("play").classList.contains("on")) layout();
+}
+function layout() {
+  const W = cv.clientWidth, H = cv.clientHeight, dpr = window.devicePixelRatio || 1;
+  if (!W || !H) return;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const laneD = Math.min(H / 3, 124), lane = laneD - 10, R = Math.min((lane - 10) / 2, 48), r = laneD / 2;
+  const y1 = (H - 3 * laneD) / 2 + laneD / 2, xl = 6 + lane / 2 + r, xr = W - xl;
+  const total = (xr + R) + Math.PI * r + (xr - xl) + Math.PI * r + (W + R - xl);
+  if (geo) { const k = total / geo.total; for (const pl of g.plates) pl.s *= k; g.dist *= k; }
+  geo = { W, H, laneD, lane, R, r, y1, y2: y1 + laneD, y3: y1 + 2 * laneD, xl, xr, total };
+}
+/* 路程 s 對應的 [x, y, 行進方向 tx, ty]：上軌左→右、右轉彎、中軌右→左、左轉彎、下軌左→右 */
+function point(s) {
+  const { y1, y2, y3, xl, xr, r } = geo, arc = Math.PI * r;
+  if (s <= xr) return [s, y1, 1, 0];
+  s -= xr;
+  if (s <= arc) { const a = s / r; return [xr + r * Math.sin(a), y1 + r - r * Math.cos(a), Math.cos(a), Math.sin(a)]; }
+  s -= arc;
+  if (s <= xr - xl) return [xr - s, y2, -1, 0];
+  s -= xr - xl;
+  if (s <= arc) { const a = s / r; return [xl - r * Math.sin(a), y2 + r - r * Math.cos(a), -Math.cos(a), Math.sin(a)]; }
+  return [xl + s - arc, y3, 1, 0];
+}
+
+/* ---- 畫 ---- */
+function wrap(text, font, maxW) {
+  ctx.font = font;
+  const lines = []; let cur = "";
+  for (const ch of text) {
+    if (cur && ctx.measureText(cur + ch).width > maxW) { lines.push(cur); cur = ch; } else cur += ch;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+function drawPlate(pl) {
+  const w = pl.w, R = geo.R, [x, y] = point(pl.s);
+  ctx.globalAlpha = pl.faded ? 0.35 : 1;                 // 只差一點的盤子：變淡，漏掉不再扣血
+  ctx.beginPath(); ctx.arc(x, y, R, 0, 2 * Math.PI);
+  ctx.fillStyle = "#fff"; ctx.fill();
+  ctx.lineWidth = 5; ctx.strokeStyle = (CATS[w.cat] || ["", "#999"])[1]; ctx.stroke();
+  ctx.fillStyle = INK; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const maxLines = w.emoji ? 2 : 3, boxW = 2 * R - (w.emoji ? 14 : 20);
+  let lines = [], px = 15;
+  for (; px >= 10; px--) { lines = wrap(w.zh, `bold ${px}px ${ZH}`, boxW); if (lines.length <= maxLines) break; }
+  if (px < 10) px = 10;
+  const lh = px + 2;
+  let cy = y;
+  if (w.emoji) { ctx.font = `${Math.round(R * 0.6)}px ${ZH}`; ctx.fillText(w.emoji, x, y - R * 0.38); cy = y + R * 0.36; }
+  ctx.font = `bold ${px}px ${ZH}`;
+  lines.forEach((ln, i) => ctx.fillText(ln, x, cy + (i - (lines.length - 1) / 2) * lh));
+  ctx.globalAlpha = 1;
+}
+function draw() {
+  const { W, H, lane, y1, y2, y3, xl, xr, r, total } = geo;
+  ctx.clearRect(0, 0, W, H);
+  ctx.beginPath();                                        // S 型履帶
+  ctx.moveTo(-10, y1); ctx.lineTo(xr, y1);
+  ctx.arc(xr, y1 + r, r, -Math.PI / 2, Math.PI / 2);
+  ctx.lineTo(xl, y2);
+  ctx.arc(xl, y2 + r, r, -Math.PI / 2, Math.PI / 2, true);
+  ctx.lineTo(W + 10, y3);
+  ctx.lineWidth = lane; ctx.lineCap = "butt"; ctx.lineJoin = "round"; ctx.strokeStyle = "#575757"; ctx.stroke();
+  ctx.lineWidth = 2; ctx.strokeStyle = "#6a6a6a"; ctx.beginPath();
+  for (let s = -30 + (g.dist % 30); s < total; s += 30) {   // 會動的履帶紋路
+    const [x, y, tx, ty] = point(s);
+    ctx.moveTo(x + ty * lane / 2, y - tx * lane / 2); ctx.lineTo(x - ty * lane / 2, y + tx * lane / 2);
+  }
+  ctx.stroke();
+  ctx.setLineDash([6, 5]); ctx.strokeStyle = RED; ctx.lineWidth = 2; ctx.beginPath();   // 出口＝漏掉線
+  ctx.moveTo(W - 2, y3 - lane / 2 - 4); ctx.lineTo(W - 2, y3 + lane / 2 + 4); ctx.stroke(); ctx.setLineDash([]);
+  for (const pl of g.plates) drawPlate(pl);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const p of g.pops) {                               // 飄字
+    const k = (g.t - p.t0) / 900;
+    ctx.font = `bold ${p.px}px ${JA}`; ctx.lineWidth = 4; ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.fillStyle = p.color;
+    const x = Math.max(60, Math.min(W - 60, p.x));
+    ctx.strokeText(p.text, x, p.y - 26 - 30 * k); ctx.fillText(p.text, x, p.y - 26 - 30 * k);
+  }
+  if (g.t - g.hurtAt < 250) { ctx.lineWidth = 8; ctx.strokeStyle = RED; ctx.strokeRect(4, 4, W - 8, H - 8); }
+}
+function hud() {
+  $("hearts").innerHTML = Array.from({ length: HP }, (_, i) =>
+    `<span style="--w:${g.hp >= 2 * i + 2 ? "100%" : g.hp === 2 * i + 1 ? "50%" : "0"}">♥</span>`).join("");
+  $("lv").textContent = `Lv.${level()}　${tierName()} 的字`;
+  $("bar").firstElementChild.style.width = (100 * (g.eaten % PER_LEVEL) / PER_LEVEL) + "%";
+  $("eaten").textContent = `已吃 ${g.eaten} 盤`;
+}
+const say = (html) => { $("feedback").innerHTML = html; };
+const kanjiOf = (w) => (w.kanji && w.kanji !== w.kana ? w.kanji : "");
+function show(id) {
+  for (const s of document.querySelectorAll(".screen")) s.classList.toggle("on", s.id === id);
+}
+
+/* ---- 一局的開始與結束 ---- */
+const level = () => 1 + Math.floor(g.eaten / PER_LEVEL);
+const topTier = () => Math.min(g.picker.start + level(), TIERS.length) - 1;
+const tierName = () => [...new Set([TIERS[g.picker.start], TIERS[topTier()]])].join("～");
+
+function showStart() {
+  const prog = new Learn.Progress(store);
+  $("footer").textContent = `📱 這支手機的紀錄：已記熟 ${prog.mastered()} 字（不跟桌機同步）`;
+  show("start");
+}
+function start() {
+  const cats = [...document.querySelectorAll("#cats input")].filter((c) => c.checked).map((c) => c.value);
+  store.setItem("sushi_cats", JSON.stringify(cats));
+  g.prog = new Learn.Progress(store);
+  g.picker = new Learn.Picker(g.prog, WORDS.filter((w) => cats.includes(w.cat)));
+  if (!g.picker.tiers.some((t) => t.length)) { $("startMsg").textContent = "至少勾一個題材。"; return; }
+  Object.assign(g, { stats: {}, missedWords: {}, retry: [], recent: [], plates: [], pops: [],
+    hp: 2 * HP, eaten: 0, dist: 0, t: 0, hurtAt: -9999, nextSpawn: 0, playing: true });
+  const skip = TIERS.slice(0, g.picker.start);
+  say(`<span class="muted">打出讀音就吃掉，打錯可以直接刪掉重打。`
+    + (skip.length ? `<br>${skip.join("・")} 已經很熟，從 ${TIERS[g.picker.start]} 開始` : "") + `</span>`);
+  $("startMsg").textContent = "";
+  show("play");
+  inp.value = ""; stale = "";
+  inp.focus();                       // 要在點「開始」的當下叫出鍵盤，iPhone 才肯彈
+  geo = null; layout(); hud();
+  lastFrame = performance.now();
+  cancelAnimationFrame(raf); raf = requestAnimationFrame(frame);
+}
+function endRound() {
+  if (!g.playing) return;
+  g.playing = false;
+  cancelAnimationFrame(raf);
+  g.plates = [];
+  let reviewed = 0;
+  for (const s of Object.values(g.stats)) {
+    if (s.first === null) continue;             // 盤子還在輸送帶上就結束了：不記
+    const miss = s.first === "miss";
+    g.prog.review(s.w.kana, Learn.ratingFor(miss, !miss && s.first.early), miss ? 0 : s.first.ms);
+    reviewed++;
+  }
+  g.prog.save();
+  inp.blur();
+  $("resTitle").textContent = `結束！吃了 ${g.eaten} 盤　·　最高 Lv.${level()}（${TIERS[topTier()]}）`;
+  const missed = Object.values(g.missedWords);
+  $("resSub").textContent = missed.length
+    ? `這局漏掉的字（${missed.length}）：看一遍再上場。記錄了 ${reviewed} 個字。`
+    : `這局沒有漏掉的字 🎉　記錄了 ${reviewed} 個字。`;
+  $("review").innerHTML = missed.map(reviewCard).join("");
+  show("result");
+}
+/* 例句裡本次的單字標紅粗體；動詞變化退而比對詞幹 */
+function mark(ex, w) {
+  const k = w.kanji || w.kana, last = k.slice(-1);
+  for (const c of [ex.hl, k, w.kana, last >= "ぁ" && last <= "ん" ? k.slice(0, -1) : ""]) {
+    if (c && ex.jp.includes(c)) { const i = ex.jp.indexOf(c); return esc(ex.jp.slice(0, i)) + `<b>${esc(c)}</b>` + esc(ex.jp.slice(i + c.length)); }
+  }
+  return esc(ex.jp);
+}
+function reviewCard(w) {
+  return `<div class="card"><div class="pic">${esc(w.emoji || "")}</div><div class="zh">${esc(w.zh)}</div>`
+    + `<div lang="ja"><span class="kana">${esc(w.kana)}</span><span class="kanji">${esc(kanjiOf(w))}</span></div>`
+    + (w.ex ? `<div class="ex"><span lang="ja">${mark(w.ex, w)}</span><small>${esc(w.ex.zh || "")}</small></div>` : "") + `</div>`;
+}
+
+/* ---- 每一格 ---- */
+function frame(now) {
+  if (!g.playing) return;
+  const dt = Math.min(now - lastFrame, 100);     // 切到別的 App 再回來：不補跑，等於暫停
+  lastFrame = now;
+  if (geo) {
+    g.t += dt;
+    const step = geo.total / TRAVEL_S * dt / 1000;
+    g.dist += step;
+    for (const pl of g.plates) pl.s += step;
+    for (const pl of g.plates.filter((p) => p.s > geo.total)) {
+      g.plates.splice(g.plates.indexOf(pl), 1);
+      missed(pl);
+      if (!g.playing) return;
+    }
+    if (g.t >= g.nextSpawn && g.plates.length < MAX_PLATES) spawn();
+    g.pops = g.pops.filter((p) => g.t - p.t0 < 900);
+    draw();
+  } else layout();
+  raf = requestAnimationFrame(frame);
+}
+/* 下一盤出什麼字：先看要不要重考漏掉的字，再依等級決定級別 */
+function choose() {
+  const busy = new Set(g.plates.map((pl) => pl.w.kana));
+  const lastN = (n) => new Set([...busy, ...g.recent.slice(-n)]);
+  const retry = g.retry.filter((w) => !busy.has(w.kana) && !g.recent.slice(-RETRY_GAP).includes(w.kana));
+  if (retry.length && Math.random() < 0.3) return retry[0];
+  const top = topTier(), base = g.picker.start, k = g.eaten - PER_LEVEL * (top - base);
+  let tier;
+  if (top === 0 || Math.random() < (top === base ? 0.75 : Math.min(0.25 + 0.05 * k, 0.7))) tier = top;
+  else tier = Math.random() < 0.6 ? top - 1 : Math.floor(Math.random() * top);
+  const order = [tier];
+  for (let t = tier - 1; t >= 0; t--) order.push(t);
+  for (let t = tier + 1; t < TIERS.length; t++) order.push(t);
+  for (const t of order) for (const avoid of [lastN(GAP), lastN(3), busy]) {
+    const w = g.picker.pick(t, avoid);
+    if (w) return w;
+  }
+  return null;
+}
+function spawn() {
+  const w = choose();
+  if (!w) return;
+  if (!g.stats[w.kana]) g.stats[w.kana] = { w, first: null };
+  g.recent.push(w.kana);
+  g.plates.push({ w, s: -geo.R, born: g.t });
+  g.nextSpawn = g.t + SPAWN_MS;
+}
+function hurt(halves, text, x, y) {
+  g.hp -= halves; g.hurtAt = g.t;
+  g.pops.push({ text, x, y, t0: g.t, color: RED, px: 20 });
+  if (navigator.vibrate) navigator.vibrate(40);
+}
+function missed(pl) {
+  const w = pl.w, s = g.stats[w.kana];
+  if (s.first === null) s.first = "miss";
+  g.missedWords[w.kana] = w;
+  if (!g.retry.includes(w)) g.retry.push(w);
+  if (!pl.faded) hurt(2, "−♥", geo.W - 50, geo.y3);     // 打錯時已扣過半顆的盤子，漏掉不再扣
+  say(`<span class="red">漏掉了</span><b>${esc(w.zh)}</b>＝<span lang="ja" class="big red">${esc(w.kana)}</span>`
+    + (kanjiOf(w) ? `<span lang="ja">（${esc(kanjiOf(w))}）</span>` : ""));
+  hud();
+  if (g.hp <= 0) endRound();
+}
+function eat(pl) {
+  const w = pl.w, s = g.stats[w.kana];
+  g.plates.splice(g.plates.indexOf(pl), 1);
+  if (s.first === null) s.first = { ms: Math.round(g.t - pl.born), early: pl.s < geo.total / 2 && !s.near };
+  const i = g.retry.indexOf(w);
+  if (i >= 0) g.retry.splice(i, 1);
+  const before = level();
+  g.eaten++;
+  const [x, y] = point(pl.s);
+  g.pops.push({ text: "ぱく！", x, y, t0: g.t, color: "#e0802c", px: 18 });
+  say(`<span class="green mid">✓</span><span lang="ja" class="mid">${esc(w.kana)}</span>`
+    + (kanjiOf(w) ? `<span lang="ja">${esc(kanjiOf(w))}</span>` : "") + `<span class="muted">${esc(w.zh)}</span>`);
+  if (level() > before) {
+    g.pops.push({ text: `Lv.${level()}！` + (g.picker.start + level() <= TIERS.length ? `${TIERS[topTier()]} 的字開始出現` : "全部級別都出場了"),
+      x: geo.W / 2, y: geo.y2 - 6, t0: g.t, color: "#c0392b", px: 19 });
+  }
+  hud();
+}
+
+/* ---- 輸入 ----
+   iPhone 的日文鍵盤在「還沒按確定」時，程式清不掉輸入框裡的字。所以吃掉一盤後把當時的字記成 stale，
+   之後框裡如果還是以它開頭，就當它不存在；兩種讀法（去掉／不去掉）都拿去比對，避免誤判。 */
+function texts() {
+  const v = inp.value;
+  if (stale && (v.length < stale.length || !v.startsWith(stale))) stale = "";   // 變短或換了開頭＝框確實清掉過
+  return stale && v.length > stale.length ? [v.slice(stale.length), v] : [v];
+}
+function onText() {
+  if (!g.playing) return;
+  for (const text of texts()) {
+    const hits = g.plates.filter((pl) => Learn.isCorrect(pl.w, text));
+    if (hits.length) {
+      eat(hits.reduce((a, b) => (b.s > a.s ? b : a)));     // 同一個字有兩盤，先吃快離開的
+      stale = inp.value; inp.value = "";
+      return;
+    }
+  }
+}
+function onEnter() {
+  const cand = texts().map((t) => t.trim()).filter(Boolean);
+  inp.value = ""; stale = "";
+  if (!g.playing || !cand.length) return;
+  if (!g.plates.length) { say(`<span class="muted">輸送帶上沒有盤子。</span>`); return; }
+  const near = g.plates.filter((pl) => cand.some((t) => Learn.similar(pl.w, t)));   // 只差濁音／長音／促音／相似音
+  for (const pl of near) { pl.faded = true; g.stats[pl.w.kana].near = true; }
+  hurt(near.length ? 1 : 2, near.length ? "−½♥" : "−♥", geo.W / 2, geo.y2);
+  say(near.length
+    ? `<span class="red">差一點！只差在濁音／長音／相似音</span><span class="muted">那盤變淡了，漏掉不再扣血</span>`
+    : `<span class="red">不對</span><span class="muted">「${esc(cand[0])}」不是輸送帶上的任何一盤</span>`);
+  hud();
+  if (g.hp <= 0) endRound();
+}
+inp.addEventListener("input", onText);
+inp.addEventListener("compositionend", () => { onText(); if (stale && inp.value === stale) { inp.value = ""; stale = ""; } });
+$("f").addEventListener("submit", (e) => { e.preventDefault(); onEnter(); });
+$("stage").addEventListener("pointerdown", (e) => { e.preventDefault(); inp.focus(); });
+$("startBtn").addEventListener("click", start);
+$("againBtn").addEventListener("click", start);
+$("backBtn").addEventListener("click", showStart);
+$("quit").addEventListener("click", endRound);     // 隨時可中斷：已作答的照樣記錄
+window.addEventListener("pagehide", endRound);
+window.addEventListener("resize", fit);
+if (window.visualViewport) { visualViewport.addEventListener("resize", fit); visualViewport.addEventListener("scroll", fit); }
+fit();
+
+fetch("words.json").then((r) => r.json()).then((ws) => {
+  WORDS = ws;
+  let saved = null;
+  try { saved = JSON.parse(store.getItem("sushi_cats")); } catch (e) { saved = null; }
+  const have = new Set(ws.map((w) => w.cat));
+  $("cats").innerHTML = Object.keys(CATS).filter((k) => have.has(k)).map((k) =>
+    `<label><input type="checkbox" value="${k}" ${!saved || saved.includes(k) ? "checked" : ""}>${CATS[k][0]}</label>`).join("");
+  showStart();
+}).catch(() => { $("startMsg").textContent = "字庫讀不到，請連上網路後重新打開一次。"; });
+
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  navigator.serviceWorker.register("sw.js");
+}
+</script>
+</body>
+</html>
