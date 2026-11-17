@@ -51,6 +51,7 @@
   #inp { width: 100%; border: 3px solid var(--orange); border-radius: 10px; padding: 6px 12px; background: #fff;
     font-size: 22px; text-align: center; outline: none; color: var(--ink); }
 
+  #swap { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; pointer-events: none; }
   #result { padding: 16px 14px calc(12px + env(safe-area-inset-bottom)); gap: 8px; }
   #resTitle { font-size: 20px; font-weight: bold; }
   #resSub { color: var(--muted); font-size: 14px; }
@@ -94,6 +95,8 @@
       <input id="inp" lang="ja" type="text" inputmode="text" enterkeyhint="send" autocomplete="off" autocorrect="off"
              autocapitalize="off" spellcheck="false" placeholder="看中文，打出日文讀音">
     </form>
+    <input id="swap" lang="ja" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+           tabindex="-1" aria-hidden="true">
   </section>
 
   <section id="result" class="screen">
@@ -386,13 +389,22 @@ function texts() {
   if (stale && (v.length < stale.length || !v.startsWith(stale))) stale = "";   // 變短或換了開頭＝框確實清掉過
   return stale && v.length > stale.length ? [v.slice(stale.length), v] : [v];
 }
+/* 答對後清空輸入框。還在選字（底線）狀態時直接清會被 iPhone 塞回來，
+   所以先把游標借放到看不見的 #swap，讓輸入法結束這一段，清掉後再拿回來；鍵盤不會收起來。 */
+let composing = false;
+function clearInput() {
+  stale = inp.value;
+  if (composing) { $("swap").focus(); inp.value = ""; inp.focus(); composing = false; }
+  inp.value = "";
+  for (const ms of [0, 60]) setTimeout(() => { if (stale && inp.value === stale) { inp.value = ""; stale = ""; } }, ms);
+}
 function onText() {
   if (!g.playing) return;
   for (const text of texts()) {
     const hits = g.plates.filter((pl) => Learn.isCorrect(pl.w, text));
     if (hits.length) {
       eat(hits.reduce((a, b) => (b.s > a.s ? b : a)));     // 同一個字有兩盤，先吃快離開的
-      stale = inp.value; inp.value = "";
+      clearInput();
       return;
     }
   }
@@ -412,7 +424,8 @@ function onEnter() {
   if (g.hp <= 0) endRound();
 }
 inp.addEventListener("input", onText);
-inp.addEventListener("compositionend", () => { onText(); if (stale && inp.value === stale) { inp.value = ""; stale = ""; } });
+inp.addEventListener("compositionstart", () => { composing = true; });
+inp.addEventListener("compositionend", () => { composing = false; onText(); if (stale && inp.value === stale) { inp.value = ""; stale = ""; } });
 $("f").addEventListener("submit", (e) => { e.preventDefault(); onEnter(); });
 $("stage").addEventListener("pointerdown", (e) => { e.preventDefault(); inp.focus(); });
 $("startBtn").addEventListener("click", start);
