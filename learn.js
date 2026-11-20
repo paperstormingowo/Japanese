@@ -5,6 +5,7 @@
   else root.Learn = factory(root.FSRS);
 })(this, function (F) {
   const MASTERED_DAYS = 21, SEEN_MIN = 8, HIGH_DAYS = 7, LOW_DAYS = 2;
+  const HARD_MISSES = 2;   // 累計漏掉幾次算「老是忘的字」：開局前幾盤不出、輸送帶上同時最多一盤
   const TIERS = ["N5", "N4", "N3", "N2"];
   const KEY = "sushi_progress";
   const sched = F.fsrs(F.generatorParameters({ enable_fuzz: false }));
@@ -113,6 +114,16 @@
       this.cards[kana] = JSON.parse(JSON.stringify(sched.next(card, t, rating).card));
       this.log.push({ kana, rating: ["", "Again", "Hard", "Good", "Easy"][rating], ms, at: t.toISOString() });
     }
+    misses() {                       // 每個字累計漏掉幾次（紀錄裡的 Again）
+      const n = {};
+      for (const e of this.log) if (e.rating === "Again") n[e.kana] = (n[e.kana] || 0) + 1;
+      return n;
+    }
+    lastMissed() {                   // 最近一次作答是漏掉的字：這局吃回來就是「リベンジ」
+      const last = {};
+      for (const e of this.log) last[e.kana] = e.rating;
+      return new Set(Object.keys(last).filter((k) => last[k] === "Again"));
+    }
     mastered() { return Object.values(this.cards).filter((c) => (c.stability || 0) > MASTERED_DAYS).length; }
     level() { return 1 + Math.floor(this.mastered() / 10); }
   }
@@ -155,10 +166,16 @@
     }
   }
 
-  /* 漏掉＝Again；盤子走完一半前吃到＝Good；之後才吃到＝Hard */
+  /* 第三條軌道上的讀音提示：f＝在第三條走了幾成。一進來就給第一個字，走到 full 時全部顯示，沒顯示的用・ */
+  function hint(kana, f, full = 0.6) {
+    const ks = [...kana], n = Math.min(ks.length, 1 + Math.floor(Math.max(f, 0) / full * ks.length));
+    return ks.slice(0, n).join("") + "・".repeat(ks.length - n);
+  }
+
+  /* 漏掉＝Again；盤子走完一半前吃到＝Good；之後才吃到＝Hard。到第三條看了提示才吃到算漏掉（index.html 處理） */
   function ratingFor(missed, early) {
     return missed ? F.Rating.Again : early ? F.Rating.Good : F.Rating.Hard;
   }
 
-  return { TIERS, norm, fold, isCorrect, similar, mastery, Progress, Picker, ratingFor, romajiToKana };
+  return { TIERS, HARD_MISSES, hint, norm, fold, isCorrect, similar, mastery, Progress, Picker, ratingFor, romajiToKana };
 });

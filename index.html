@@ -75,7 +75,8 @@
     <h1>🍣 回轉壽司</h1>
     <p>看盤子上的<b>中文</b>，打出<b>日文讀音</b>就吃掉<br>（假名、羅馬拼音都算）<br>
       漏一盤扣 1 顆♥，打錯按送出扣 ½～1 顆<br><b class="red">5 顆</b>扣完就結束<br>
-      每吃 10 盤升一級（N5 → N4 → N3 → N2）</p>
+      每吃 10 盤升一級（N5 → N4 → N3 → N2）<br>
+      到最後一條會慢慢顯示讀音：照著打不扣血、但算漏掉<br>吃回上次漏掉的字＋½ 顆♥</p>
     <div id="cats"></div>
     <button class="primary" id="startBtn">開始</button>
     <div id="startMsg"></div>
@@ -113,6 +114,7 @@
 "use strict";
 /* 規則正本是桌機的 sushi.py（SPEC §9）。手機版只改了畫面尺寸與下面三個節奏常數。 */
 const HP = 5, PER_LEVEL = 10, GAP = 8, RETRY_GAP = 4;
+const WARMUP = 3;         // 開局前幾盤不出「老是忘的字」（Learn.HARD_MISSES）
 const TRAVEL_S = 52;      // 一盤從入口走到出口的秒數（桌機 2834px ÷ 54px/秒，照搬）
 const SPAWN_MS = 4500;    // 出盤間隔（桌機 3300；手機軌道短、打字慢，拉開）
 const MAX_PLATES = 8;     // 輸送帶上最多幾盤（桌機 12）
@@ -149,7 +151,8 @@ function layout() {
   const y1 = (H - 3 * laneD) / 2 + laneD / 2, xl = 6 + lane / 2 + r, xr = W - xl;
   const total = (xr + R) + Math.PI * r + (xr - xl) + Math.PI * r + (W + R - xl);
   if (geo) { const k = total / geo.total; for (const pl of g.plates) pl.s *= k; g.dist *= k; }
-  geo = { W, H, laneD, lane, R, r, y1, y2: y1 + laneD, y3: y1 + 2 * laneD, xl, xr, total };
+  geo = { W, H, laneD, lane, R, r, y1, y2: y1 + laneD, y3: y1 + 2 * laneD, xl, xr, total,
+    l3: xr + 2 * Math.PI * r + (xr - xl) };              // 第三條起點：過了這裡逐步顯示讀音，這時才吃到算漏掉、不扣血
 }
 /* 路程 s 對應的 [x, y, 行進方向 tx, ty]：上軌左→右、右轉彎、中軌右→左、左轉彎、下軌左→右 */
 function point(s) {
@@ -191,6 +194,15 @@ function drawPlate(pl) {
   ctx.font = `bold ${px}px ${ZH}`;
   lines.forEach((ln, i) => ctx.fillText(ln, x, cy + (i - (lines.length - 1) / 2) * lh));
   ctx.globalAlpha = 1;
+  if (pl.s >= geo.l3) {                                   // 第三條：盤子下緣逐步顯示讀音
+    const text = Learn.hint(w.kana, (pl.s - geo.l3) / (geo.total - geo.l3));
+    let hp = 15;
+    for (; hp > 10; hp--) { ctx.font = `bold ${hp}px ${JA}`; if (ctx.measureText(text).width <= 2 * R + 10) break; }
+    const tw = ctx.measureText(text).width, h = hp + 8, top = y + R - h + 6;
+    ctx.beginPath(); ctx.roundRect(x - tw / 2 - 7, top, tw + 14, h, 8);
+    ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = RED; ctx.stroke();
+    ctx.fillStyle = RED; ctx.fillText(text, x, top + h / 2 + 1);
+  }
 }
 function draw() {
   const { W, H, lane, y1, y2, y3, xl, xr, r, total } = geo;
@@ -250,6 +262,7 @@ function start() {
   g.picker = new Learn.Picker(g.prog, WORDS.filter((w) => cats.includes(w.cat)));
   if (!g.picker.tiers.some((t) => t.length)) { $("startMsg").textContent = "至少勾一個題材。"; return; }
   Object.assign(g, { stats: {}, missedWords: {}, retry: [], recent: [], plates: [], pops: [],
+    missN: g.prog.misses(), revenge: g.prog.lastMissed(),   // 累計漏掉次數；上次漏掉、吃回來回半顆心
     hp: 2 * HP, eaten: 0, dist: 0, t: 0, hurtAt: -9999, nextSpawn: 0, playing: true });
   const skip = TIERS.slice(0, g.picker.start);
   say(`<span class="muted">打出讀音就吃掉，打錯可以直接刪掉重打。`
@@ -322,8 +335,9 @@ function frame(now) {
 /* 下一盤出什麼字：先看要不要重考漏掉的字，再依等級決定級別 */
 function choose() {
   const busy = new Set(g.plates.map((pl) => pl.w.kana));
-  const lastN = (n) => new Set([...busy, ...g.recent.slice(-n)]);
-  const retry = g.retry.filter((w) => !busy.has(w.kana) && !g.recent.slice(-RETRY_GAP).includes(w.kana));
+  const hard = new Set(Object.keys(g.missN).filter((k) => g.missN[k] >= Learn.HARD_MISSES));
+  const block = g.recent.length < WARMUP || [...busy].some((k) => hard.has(k)) ? hard : new Set();   // 老是忘的字：開局暖身不出、同時最多一盤
+  const retry = g.retry.filter((w) => !busy.has(w.kana) && !block.has(w.kana) && !g.recent.slice(-RETRY_GAP).includes(w.kana));
   if (retry.length && Math.random() < 0.3) return retry[0];
   const top = topTier(), base = g.picker.start, k = g.eaten - PER_LEVEL * (top - base);
   let tier;
@@ -332,9 +346,12 @@ function choose() {
   const order = [tier];
   for (let t = tier - 1; t >= 0; t--) order.push(t);
   for (let t = tier + 1; t < TIERS.length; t++) order.push(t);
-  for (const t of order) for (const avoid of [lastN(GAP), lastN(3), busy]) {
-    const w = g.picker.pick(t, avoid);
-    if (w) return w;
+  for (const blk of block.size ? [block, new Set()] : [block]) {   // 只剩老是忘的字可出時才放寬
+    const lastN = (n) => new Set([...busy, ...blk, ...g.recent.slice(-n)]);
+    for (const t of order) for (const avoid of [lastN(GAP), lastN(3), new Set([...busy, ...blk])]) {
+      const w = g.picker.pick(t, avoid);
+      if (w) return w;
+    }
   }
   return null;
 }
@@ -351,11 +368,18 @@ function hurt(halves, text, x, y) {
   g.pops.push({ text, x, y, t0: g.t, color: RED, px: 20 });
   if (navigator.vibrate) navigator.vibrate(40);
 }
-function missed(pl) {
-  const w = pl.w, s = g.stats[w.kana];
+/* 記成漏掉：評分 Again、結算畫面複習、稍後重考、累計次數＋1、之後吃回來算リベンジ */
+function noteMiss(w) {
+  const s = g.stats[w.kana];
   if (s.first === null) s.first = "miss";
   g.missedWords[w.kana] = w;
   if (!g.retry.includes(w)) g.retry.push(w);
+  g.missN[w.kana] = (g.missN[w.kana] || 0) + 1;
+  g.revenge.add(w.kana);
+}
+function missed(pl) {
+  const w = pl.w;
+  noteMiss(w);
   if (!pl.faded) hurt(2, "−♥", geo.W - 50, geo.y3);     // 打錯時已扣過半顆的盤子，漏掉不再扣
   say(`<span class="red">漏掉了</span><b>${esc(w.zh)}</b>＝<span lang="ja" class="big red">${esc(w.kana)}</span>`
     + (kanjiOf(w) ? `<span lang="ja">（${esc(kanjiOf(w))}）</span>` : ""));
@@ -365,15 +389,27 @@ function missed(pl) {
 function eat(pl) {
   const w = pl.w, s = g.stats[w.kana];
   g.plates.splice(g.plates.indexOf(pl), 1);
+  const [x, y] = point(pl.s);
+  const word = `<span lang="ja" class="mid">${esc(w.kana)}</span>`
+    + (kanjiOf(w) ? `<span lang="ja">${esc(kanjiOf(w))}</span>` : "") + `<span class="muted">${esc(w.zh)}</span>`;
+  if (pl.s >= geo.l3) {                                   // 看了提示才吃到：算漏掉、不扣血、不算盤數
+    noteMiss(w);
+    g.pops.push({ text: "照著打", x, y, t0: g.t, color: "#777", px: 16 });
+    say(`<span class="muted">看了提示：算漏掉、不扣血</span>` + word);
+    hud();
+    return;
+  }
   if (s.first === null) s.first = { ms: Math.round(g.t - pl.born), early: pl.s < geo.total / 2 && !s.near };
   const i = g.retry.indexOf(w);
   if (i >= 0) g.retry.splice(i, 1);
   const before = level();
   g.eaten++;
-  const [x, y] = point(pl.s);
-  g.pops.push({ text: "ぱく！", x, y, t0: g.t, color: "#e0802c", px: 18 });
-  say(`<span class="green mid">✓</span><span lang="ja" class="mid">${esc(w.kana)}</span>`
-    + (kanjiOf(w) ? `<span lang="ja">${esc(kanjiOf(w))}</span>` : "") + `<span class="muted">${esc(w.zh)}</span>`);
+  if (g.revenge.has(w.kana)) {                            // 上次（或這局）漏掉的字，自己想起來了
+    g.revenge.delete(w.kana);
+    g.hp = Math.min(2 * HP, g.hp + 1);
+    g.pops.push({ text: "リベンジ！＋½♥", x, y, t0: g.t, color: "#2e7d32", px: 18 });
+  } else g.pops.push({ text: "ぱく！", x, y, t0: g.t, color: "#e0802c", px: 18 });
+  say(`<span class="green mid">✓</span>` + word);
   if (level() > before) {
     g.pops.push({ text: `Lv.${level()}！` + (g.picker.start + level() <= TIERS.length ? `${TIERS[topTier()]} 的字開始出現` : "全部級別都出場了"),
       x: geo.W / 2, y: geo.y2 - 6, t0: g.t, color: "#c0392b", px: 19 });
